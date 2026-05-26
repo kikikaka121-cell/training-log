@@ -77,18 +77,16 @@ export default function WorkoutTracker() {
   const [editGroups, setEditGroups] = useState([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const result = await window.storage.get("workout_logs");
-        if (result && result.value) setLogs(migrateLogs(JSON.parse(result.value)));
-      } catch {}
-      setStorageReady(true);
-    })();
+    try {
+      const saved = localStorage.getItem("workout_logs");
+      if (saved) setLogs(migrateLogs(JSON.parse(saved)));
+    } catch {}
+    setStorageReady(true);
   }, []);
 
   useEffect(() => {
     if (!storageReady) return;
-    (async () => { try { await window.storage.set("workout_logs", JSON.stringify(logs)); } catch {} })();
+    try { localStorage.setItem("workout_logs", JSON.stringify(logs)); } catch {}
   }, [logs, storageReady]);
 
   useEffect(() => {

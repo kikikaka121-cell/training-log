@@ -131,6 +131,16 @@ export default function WorkoutTracker() {
 
   const removeSetFromGroup = (gIdx,sIdx) => setExerciseGroups(prev => prev.map((g,gi) => { if(gi!==gIdx) return g; const sets=g.sets.filter((_,si)=>si!==sIdx); return sets.length?{...g,sets}:null; }).filter(Boolean));
 
+  const moveGroup = (gIdx, dir) => {
+    setExerciseGroups(prev => {
+      const next = [...prev];
+      const target = gIdx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[gIdx], next[target]] = [next[target], next[gIdx]];
+      return next;
+    });
+  };
+
   const saveLog = () => {
     const allSets = exerciseGroups.flatMap(g => g.sets.filter(s=>s.weight&&s.reps).map(s=>({exercise:g.exercise,...s})));
     if (!allSets.length || !dayType) return;
@@ -160,6 +170,15 @@ export default function WorkoutTracker() {
   const changeEditExercise = (gIdx,newEx) => setEditGroups(prev => prev.map((g,gi) => gi!==gIdx?g:{...g,exercise:newEx}));
   const addEditGroup = () => setEditGroups(prev => [...prev,{exercise:"",sets:[{weight:"",reps:""}]}]);
   const removeEditGroup = (gIdx) => setEditGroups(prev => prev.filter((_,gi)=>gi!==gIdx));
+  const moveEditGroup = (gIdx, dir) => {
+    setEditGroups(prev => {
+      const next = [...prev];
+      const target = gIdx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[gIdx], next[target]] = [next[target], next[gIdx]];
+      return next;
+    });
+  };
   const saveEdit = (date, entryIdx) => {
     const allSets = editGroups.flatMap(g => g.sets.filter(s=>s.weight&&s.reps).map(s=>({exercise:g.exercise,...s})));
     if (!allSets.length) return;
@@ -334,8 +353,12 @@ export default function WorkoutTracker() {
               </div>
               {exerciseGroups.map((group,gIdx) => (
                 <div key={group.exercise} style={{ background:"#12121c", borderRadius:12, marginBottom:12, border:`1px solid ${activePPL.color}33`, overflow:"hidden" }}>
-                  <div style={{ background:activePPL.bg, padding:"10px 14px", borderBottom:`1px solid ${activePPL.color}22` }}>
+                  <div style={{ background:activePPL.bg, padding:"10px 14px", borderBottom:`1px solid ${activePPL.color}22`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <span style={{ fontSize:14, fontWeight:800, color:activePPL.color }}>{group.exercise}</span>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <button onClick={() => moveGroup(gIdx, -1)} disabled={gIdx === 0} style={{ background:"none", border:"none", color:gIdx===0?"#3a3a3a":activePPL.color, fontSize:14, cursor:gIdx===0?"default":"pointer", padding:"0 4px" }}>↑</button>
+                      <button onClick={() => moveGroup(gIdx, 1)} disabled={gIdx === exerciseGroups.length - 1} style={{ background:"none", border:"none", color:gIdx===exerciseGroups.length-1?"#3a3a3a":activePPL.color, fontSize:14, cursor:gIdx===exerciseGroups.length-1?"default":"pointer", padding:"0 4px" }}>↓</button>
+                    </div>
                   </div>
                   <div style={{ padding:"10px 14px" }}>
                     {group.sets.map((s,sIdx) => (
@@ -412,6 +435,8 @@ export default function WorkoutTracker() {
                                 <option value="">種目を選択</option>
                                 {ppl.exercises.map(ex=><option key={ex} value={ex}>{ex}</option>)}
                               </select>
+                              <button onClick={()=>moveEditGroup(gIdx,-1)} disabled={gIdx===0} style={{ background:"none", border:"none", color:gIdx===0?"#3a3a3a":ppl.color, fontSize:14, cursor:gIdx===0?"default":"pointer", padding:"0 2px" }}>↑</button>
+                              <button onClick={()=>moveEditGroup(gIdx,1)} disabled={gIdx===editGroups.length-1} style={{ background:"none", border:"none", color:gIdx===editGroups.length-1?"#3a3a3a":ppl.color, fontSize:14, cursor:gIdx===editGroups.length-1?"default":"pointer", padding:"0 2px" }}>↓</button>
                               <button onClick={()=>removeEditGroup(gIdx)} style={{ background:"none", border:"none", color:"#3a3a5a", fontSize:18, cursor:"pointer", padding:"0 4px" }}>×</button>
                             </div>
                             {group.sets.map((s,sIdx) => (

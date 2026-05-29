@@ -103,10 +103,11 @@ export default function WorkoutTracker() {
       .sort(([a],[b]) => a.localeCompare(b))
       .forEach(([date, day]) => {
         (day.entries||[]).forEach(entry => {
-          const sets = entry.sets.filter(s => s.exercise === exercise && s.weight);
+          const sets = entry.sets.filter(s => s.exercise === exercise && s.weight && s.reps);
           if (sets.length) {
-            const maxWeight = Math.max(...sets.map(s => parseFloat(s.weight)));
-            points.push({ date, weight: maxWeight });
+            const totalVolume = sets.reduce((sum, s) => sum + parseFloat(s.weight) * parseFloat(s.reps), 0);
+            const maxSet = sets.reduce((best, s) => parseFloat(s.weight) >= parseFloat(best.weight) ? s : best, sets[0]);
+            points.push({ date, volume: Math.round(totalVolume), maxWeight: parseFloat(maxSet.weight), maxReps: parseFloat(maxSet.reps) });
           }
         });
       });
@@ -273,7 +274,7 @@ export default function WorkoutTracker() {
 
       {/* Tabs */}
       <div style={{ display:"flex", borderBottom:"1px solid #1e1e2e" }}>
-        {[["log","記録する"],["history","履歴"],["volume","Stats"]].map(([key,label]) => (
+        {[["log","Log"],["history","Calendar"],["volume","Stats"]].map(([key,label]) => (
           <button key={key} onClick={() => setView(key)} style={{ flex:1, padding:"14px 0", background:"none", border:"none", color:view===key?"#c8f060":"#5a5a7a", fontWeight:view===key?700:400, fontSize:14, cursor:"pointer", borderBottom:view===key?"2px solid #c8f060":"2px solid transparent", transition:"all 0.2s", fontFamily:"inherit" }}>{label}</button>
         ))}
       </div>
@@ -581,9 +582,9 @@ export default function WorkoutTracker() {
       {view === "volume" && (
         <div style={{ padding:"20px 16px" }}>
 
-          {/* 重量推移グラフ */}
+          {/* ボリューム推移グラフ */}
           <div style={{ marginBottom:24 }}>
-            <div style={{ fontSize:11, letterSpacing:2, color:"#5a5a7a", marginBottom:10 }}>重量推移（過去1ヶ月）</div>
+            <div style={{ fontSize:11, letterSpacing:2, color:"#5a5a7a", marginBottom:10 }}>VOLUME PROGRESS（過去1ヶ月）</div>
             <select value={graphExercise} onChange={e=>setGraphExercise(e.target.value)} style={{ width:"100%", background:"#12121c", color:graphExercise?"#e8e4dc":"#5a5a7a", border:"1px solid #2a2a3e", borderRadius:10, padding:"11px 14px", fontSize:14, fontFamily:"inherit", appearance:"none", marginBottom:12, cursor:"pointer" }}>
               <option value="">種目を選択してください</option>
               {Object.entries(PPL).map(([pplKey, p]) => (
@@ -597,55 +598,73 @@ export default function WorkoutTracker() {
             {graphExercise && (() => {
               const data = getGraphData(graphExercise);
               if (!data.length) return <div style={{ textAlign:"center", color:"#3a3a5a", fontSize:13, padding:"20px 0" }}>データがありません</div>;
-              const weights = data.map(d=>d.weight);
+              const volumes = data.map(d=>d.volume);
+              const weights = data.map(d=>d.maxWeight);
+              const maxV = Math.max(...volumes) || 1;
               const minW = Math.min(...weights);
               const maxW = Math.max(...weights);
-              const range = maxW - minW || 1;
-              const W = 100, H = 120, PAD = 20;
-              const points = data.map((d,i) => {
-                const x = PAD + (i / Math.max(data.length-1,1)) * (W - PAD*2);
-                const y = PAD + (1 - (d.weight - minW) / range) * (H - PAD*2);
-                return { x, y, ...d };
-              });
-              const pathD = points.map((p,i) => `${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
-              // 色をPPLから取得
+              const rangeW = maxW - minW || 1;
+              const W = 100, H = 120, PAD_X = 4, PAD_Y = 10;
+              const barW = Math.max(1, (W - PAD_X*2) / data.length - 2);
               const exColor = (() => {
                 for (const [,p] of Object.entries(PPL)) {
                   if (p.exercises.includes(graphExercise)) return p.color;
                 }
                 return "#c8f060";
               })();
+              const linePoints = data.map((d,i) => {
+                const x = PAD_X + i * ((W - PAD_X*2) / data.length) + barW/2 + 1;
+                const y = PAD_Y + (1 - (d.maxWeight - minW) / rangeW) * (H - PAD_Y*2);
+                return { x, y };
+              });
+              const pathD = linePoints.map((p,i) => `${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
               return (
                 <div style={{ background:"#12121c", borderRadius:12, padding:"14px", border:"1px solid #1e1e2e" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-                    <span style={{ fontSize:11, color:"#5a5a7a" }}>最小 {minW}kg</span>
-                    <span style={{ fontSize:12, color:exColor, fontWeight:700 }}>最大 {maxW}kg</span>
+                  {/* 凡例 */}
+                  <div style={{ display:"flex", gap:14, marginBottom:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      <div style={{ width:12, height:8, background:exColor, borderRadius:2, opacity:0.85 }} />
+                      <span style={{ fontSize:10, color:"#5a5a7a" }}>Volume</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      <div style={{ width:12, height:2, background:"#ffffff", borderRadius:1 }} />
+                      <span style={{ fontSize:10, color:"#5a5a7a" }}>Max Weight</span>
+                    </div>
                   </div>
-                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:120 }}>
-                    {/* グリッド横線 */}
-                    {[0,0.25,0.5,0.75,1].map(t => (
-                      <line key={t} x1={PAD} x2={W-PAD} y1={PAD+(1-t)*(H-PAD*2)} y2={PAD+(1-t)*(H-PAD*2)} stroke="#1e1e2e" strokeWidth="0.5" />
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:130 }}>
+                    {/* グリッド */}
+                    {[0.25,0.5,0.75,1].map(t => (
+                      <line key={t} x1={PAD_X} x2={W-PAD_X} y1={PAD_Y+(1-t)*(H-PAD_Y*2)} y2={PAD_Y+(1-t)*(H-PAD_Y*2)} stroke="#1e1e2e" strokeWidth="0.5" />
                     ))}
-                    {/* 折れ線 */}
-                    <path d={pathD} fill="none" stroke={exColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    {/* 塗りつぶし */}
-                    <path d={`${pathD} L${points[points.length-1].x},${H-PAD} L${points[0].x},${H-PAD} Z`} fill={exColor} fillOpacity="0.08" />
-                    {/* データ点 */}
-                    {points.map((p,i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={exColor} />
+                    {/* 棒グラフ（ボリューム） */}
+                    {data.map((d,i) => {
+                      const x = PAD_X + i * ((W - PAD_X*2) / data.length) + 1;
+                      const barH = (d.volume / maxV) * (H - PAD_Y*2);
+                      const y = PAD_Y + (H - PAD_Y*2) - barH;
+                      return <rect key={i} x={x} y={y} width={barW} height={barH} fill={exColor} opacity="0.5" rx="1" />;
+                    })}
+                    {/* 折れ線（最大重量） */}
+                    <path d={pathD} fill="none" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+                    {linePoints.map((p,i) => (
+                      <circle key={i} cx={p.x} cy={p.y} r="1.8" fill="#ffffff" opacity="0.9" />
                     ))}
                   </svg>
-                  {/* 日付ラベル */}
-                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
+                  {/* 軸ラベル */}
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:2 }}>
                     <span style={{ fontSize:10, color:"#5a5a7a" }}>{new Date(data[0].date+"T00:00:00").toLocaleDateString("ja-JP",{month:"short",day:"numeric"})}</span>
                     <span style={{ fontSize:10, color:"#5a5a7a" }}>{new Date(data[data.length-1].date+"T00:00:00").toLocaleDateString("ja-JP",{month:"short",day:"numeric"})}</span>
                   </div>
-                  {/* データ一覧 */}
                   <div style={{ marginTop:12, borderTop:"1px solid #1e1e2e", paddingTop:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                      <span style={{ fontSize:10, color:"#5a5a7a", width:60 }}>日付</span>
+                      <span style={{ fontSize:10, color:exColor }}>Volume</span>
+                      <span style={{ fontSize:10, color:"#aaaaaa" }}>Max</span>
+                    </div>
                     {[...data].reverse().map((d,i) => (
                       <div key={i} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                        <span style={{ fontSize:12, color:"#5a5a7a" }}>{new Date(d.date+"T00:00:00").toLocaleDateString("ja-JP",{month:"short",day:"numeric"})}</span>
-                        <span style={{ fontSize:12, color:exColor, fontWeight:700 }}>{d.weight}kg</span>
+                        <span style={{ fontSize:12, color:"#5a5a7a", width:60 }}>{new Date(d.date+"T00:00:00").toLocaleDateString("ja-JP",{month:"short",day:"numeric"})}</span>
+                        <span style={{ fontSize:12, color:exColor, fontWeight:700 }}>{d.volume}kg</span>
+                        <span style={{ fontSize:12, color:"#aaaaaa", fontWeight:700 }}>{d.maxWeight}kg<span style={{ fontSize:10, color:"#5a5a7a", fontWeight:400 }}>×{d.maxReps}回</span></span>
                       </div>
                     ))}
                   </div>
